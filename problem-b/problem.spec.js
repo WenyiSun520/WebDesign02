@@ -2,6 +2,7 @@ const fs = require('fs');
 const cheerio = require('cheerio') //for html testing
 const inlineCss = require('inline-css'); //for css testing
 const cssParser = require('css');
+const md5 = require('md5');
 
 //include custom matchers
 const styleMatchers = require('jest-style-matchers');
@@ -16,188 +17,102 @@ const css = fs.readFileSync(cssPath, 'utf-8'); //load the HTML file once
 const baseDir = 'file://'+__dirname+'/';
 
 describe('Source code is valid', () => {
-  test('HTML validates without errors', async () => {
-    const lintOpts = {
-      'attr-bans':['align', 'background', 'bgcolor', 'border', 'frameborder', 'marginwidth', 'marginheight', 'scrolling', 'style', 'width', 'height'], //adding height, allow longdesc
-      'doctype-first':true,
-      'doctype-html5':true,
-      'html-req-lang':true,
-      'attr-name-style': false, //for meta tags
-      'line-end-style':false, //either way
-      'indent-style':false, //can mix/match
-      'indent-width':false, //don't need to beautify
-      'line-no-trailing-whitespace': false, //don't need to beautify
-      'class-style':'none', //I like dashes in classnames
-      'img-req-alt':true,
-      'link-req-noopener':false,
-      'spec-char-escape':false //for params in link urls
-    }
-
-    await expect(htmlPath).toHaveNoHtmlLintErrorsAsync(lintOpts);
-  })
-
   test('CSS validates without errors', async () => {
     await expect(cssPath).toHaveNoCssLintErrorsAsync();
   })
+
+  test('HTML has not been modified', () => {
+    let nospace = html.replace(/\s/g, ''); //strip all whitespace to account for platform modifications
+    expect(md5(nospace)).toBe('b52e5621c7c32dbc25348f6b2552b611');
+    //console.log(md5(nospace));
+  })
 });
 
-let $; //cheerio instance
-let cssRules;  
+describe('Includes required CSS rules', () => {
+  let $; //cheerio instance
+  let cssRules;
 
-beforeAll(async () => {
-  //test CSS by inlining properties and then reading them from cheerio
-  let inlined = await inlineCss(html, {extraCss: css, url:baseDir, removeLinkTags:false});
-  $ = cheerio.load(inlined);
-  // console.log(inlined);
+  beforeAll(async () => {
+    //test CSS by inlining properties and then reading them from cheerio
+    let inlined = await inlineCss(html, {extraCss: css, url:baseDir, removeLinkTags:false});
+    $ = cheerio.load(inlined);
+    // console.log(inlined);
 
-  //non-inlined rules by parsing AST tree
-  let cssAST = cssParser.parse(css, {source: cssPath});
-  cssRules = cssAST.stylesheet.rules.filter((d) => d.type === "rule");
-  // console.log(cssRules)
-})
-
-describe('The top-level heading', () => {
-  test('is present with correct content', () => {
-    let h1 = $('h1');
-    expect(h1).toHaveLength(1); //has one <h1>
-    expect(h1.text()).toMatch(/^Top 5 Songs For/); //starts with correct label
+    //non-inlined rules by parsing AST tree
+    let cssAST = cssParser.parse(css, {source: cssPath});
+    cssRules = cssAST.stylesheet.rules.filter((d) => d.type === "rule");
+    // console.log(cssRules)
   })
 
-  test('has correct styling', () => {
-    let h1 = $('h1');
-    expect(h1.css('font-weight')).toEqual('300');
-    let fontFamilySingleQuotes = (h1.css('font-family')).replace(/"/g, '\'');
-    expect(fontFamilySingleQuotes).toMatch(/'?Roboto'?, *sans-serif/);
-    expect(h1.css('text-align')).toEqual('center');
-  })
-})
-
-describe('The overall table', () => {
-  test('is present', () => {
-    expect($('table')).toHaveLength(1); //has 1 table element
+  test('1. Circles are filled gray', () => {
+    let circles = $('svg').children('circle');
+    //just counting circles down the page
+    expect(circles.eq(0).css('fill').toLowerCase()).toEqual('#5f5f5f');
+    expect(circles.eq(1).css('fill').toLowerCase()).toEqual('#5f5f5f');
   })
 
-  test('takes up half the page', () => {
-    let table = $('table');
-    expect(table.css('width')).toEqual("50%");
-    expect(table.css('margin-left')).toEqual("auto");
-    expect(table.css('margin-right')).toEqual("auto");
-  })
-})
-
-describe('The table header', () => {
-  test('includes a head section', () => {
-    let thead = $('table').children('thead');
-    expect(thead).toHaveLength(1); //includes 1 thead
+  test('2. Paths have stroke', () => {
+    let paths = $('svg').children('path');
+    //just counting paths down the page
+    expect(paths.eq(0).css('stroke').toLowerCase()).toEqual('#5f5f5f');
+    expect(paths.eq(0).css('stroke-width')).toEqual('8px');
+    expect(paths.eq(1).css('stroke').toLowerCase()).toEqual('#5f5f5f');
+    expect(paths.eq(1).css('stroke-width')).toEqual('8px');
   })
 
-  test('includes a row of header cells', () => {
-    let row = $('table > thead').children('tr');
-    expect(row).toHaveLength(1); //one header row
-    let headCells = row.children('th');
-    expect(headCells).toHaveLength(4); //has 4 <th> cells
-
-    let cellContentsNoSpaces = headCells.text().replace(/\s/,'');
-    expect(cellContentsNoSpaces).toEqual('RankArtistTitleAlbum');
+  test('3. Circles are filled white', () => {
+    let circles = $('svg').children('circle');
+    //just counting paths down the page
+    expect(circles.eq(2).css('fill').toLowerCase()).toEqual('white');
+    expect(circles.eq(3).css('fill').toLowerCase()).toEqual('white');
   })
 
-  test('has correct styling', () => {
-    let headCells = $('table > thead > tr > th');
-    headCells.each((i, el) => {
-      let cell = $(el);
-      expect(cell.css('height')).toEqual('2rem');
-      expect(cell.css('text-align')).toEqual('left');
-      expect(cell.css('color').toLowerCase()).toEqual('#1db954');
-      expect(cell.css('background-color').toLowerCase()).toEqual('#d3d3d3');
-    })
-
-    let table = $('table');
-    expect(table.css('border-collapse')).toEqual('collapse'); //check table border
-  })
-})
-
-describe('The table body', () => {
-  test('includes a body section', () => {
-    let tbody = $('table').children('tbody');
-    expect(tbody).toHaveLength(1); //includes 1 tbody
+  test('4. Circles are filled brown', () => {
+    let group = $('svg').children('g').eq(0); //first group
+    expect(group.children('circle').eq(0).css('fill').toLowerCase()).toEqual('#573d29');
+    expect(group.children('circle').eq(0).css('fill').toLowerCase()).toEqual('#573d29');
   })
 
-  test('includes required rows of data', () => {
-    let rows = $('table > tbody').children('tr');
-    expect(rows).toHaveLength(5); //body contains 5 rows
+  test('5. Circle and rect are filled light gray', () => {
+    let group = $('svg').children('g').eq(1); //second group
+    expect(group.children('circle').eq(0).css('fill').toLowerCase()).toEqual('#c0c0c0');
+    expect(group.children('rect').eq(0).css('fill').toLowerCase()).toEqual('#c0c0c0');
+    expect(group.children('rect').eq(0).css('opacity')).not.toEqual('0');
 
-    rows.each((i, el) => {
-      let row = $(el);
-      let cells = row.children('td');
-      expect(cells).toHaveLength(4); //each row has 4 cells
-
-      expect(cells.first().text()).toEqual(String(i+1)); //rows numbered 1-5
-
-      cells.each((i, el) => {
-        expect($(el).html()).not.toEqual(''); //each cell has content
-      })
-    })
+    expect(cssRules.filter((r) => r.selectors.length > 1).length).toBeGreaterThan(0); //has a rule with two selectors (grouped)
   })
 
-  test('has album covers that link elsewhere', () => {
-    let lastCells = $('table > tbody > tr > td:last-child');
-
-    lastCells.each((i, el) => {
-      let lastCell = $(el);
-      let anchor = lastCell.children('a');
-      expect(anchor).toHaveLength(1); //each cell contains an anchor element
-      expect(anchor.children('img')).toHaveLength(1); //each anchor contains img
-
-      expect(anchor.attr('target')).toEqual('_blank'); //links open in new tabs
-    })
-  })
-  
-  test('has album covers with appropriate sizing', () => {
-    let lastCells = $('table > tbody > tr > td:last-child');
-
-    lastCells.each((i, el) => {
-      let img = $(el).find('img');
-      expect(img.css('width')).toEqual('100px'); //image has correct size
-      expect(img.css('height')).toEqual('100px'); //image has correct size
-    })
-  })
-})
-
-describe('Table cell styling', () => {
-  test('is appropriate for all cells', () => {
-    let allCells = $('th, td');
-    allCells.each((i, el) => {
-      let cell = $(el);
-      expect(cell.css('padding')).toEqual('.5em');
-      expect(cell.css('border-bottom')).toEqual('1px solid #d3d3d3');
-    })
-  })
-})
-
-describe('Table row styling', () => {
-  test('alternates gray backgrounds for rows', () => {
-    let rows = $('table > tbody > tr');
-    rows.each((i, el) => {
-      if((i+1)%2 === 0) { //even rows
-        let evenRow = $(el);
-        expect(evenRow.css('background-color')).toEqual('#eee');
-      } else {
-        let oddRow = $(el);
-        expect(oddRow.css('background-color')).not.toBeDefined();
-      }
-    })
-
-    let pseudoChildRules = cssRules.filter((r) => r.selectors.join().includes(':nth-'));
-    expect(pseudoChildRules).toHaveLength(1); //uses a pseudo-class to color rows
+  test('6. Path is filled gray with red stroke', () => {
+    let paths = $('svg').children('path');
+    //just counting paths down the page
+    expect(paths.eq(2).css('fill').toLowerCase()).toEqual('#c0c0c0');
+    expect(paths.eq(2).css('stroke').toLowerCase()).toEqual('#bd250d');
+    expect(paths.eq(2).css('stroke-width')).toEqual('4px');
   })
 
-  test('highlights rows on hover', () => {
-    let hoverRules = cssRules.filter((r) => r.selectors.join().match(/tbody.*tr.*:hover/));
-    expect(hoverRules).toHaveLength(1); //should have one hover rule
+  test('7. Path is color changes on hover', () => {
+    let hoverRules = cssRules.filter((r) => r.selectors.join().includes(':hover'));
+    expect(hoverRules.length).toEqual(1); //should have one hover rule
 
     let hoverRuleDeclarations = hoverRules[0].declarations.filter((d) => d.type === 'declaration') //ignore comments
-    
-    expect(hoverRuleDeclarations[0].property).toEqual('background-color'); //has 'background-color' as property
-    expect(hoverRuleDeclarations[0].value.toLowerCase()).toEqual('pink'); //has correct value
+
+    expect(hoverRuleDeclarations[0].property).toEqual('fill'); //has 'fill' as property
+    expect(hoverRuleDeclarations[0].value.toLowerCase()).toEqual('#bd250d'); //has 'correct color'
+  })
+
+  test('8. Rectangles have opacity of 0', () => {
+    let rects = $('svg').children('rect');
+    //just counting rects down the page
+    expect(rects.eq(1).css('opacity')).toEqual('0');
+    expect(rects.eq(1).css('opacity')).toEqual('0');
+    expect(rects.eq(1).css('opacity')).toEqual('0');
+  })
+
+  test('9. Path has no stroke', () => {
+    let paths = $('svg').children('path');
+    //just counting paths down the page
+    let removed = (paths.eq(3).css('stroke') == 'none') || /^0(px)?$/.test(paths.eq(3).css('stroke-width'));
+    expect(removed).toBe(true); //has applied a style that removes the stroke
   })
 })
+
